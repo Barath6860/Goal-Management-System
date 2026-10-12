@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test 1 · Goals & Milestones · GoalMap</title>
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: #0b1020; color: #e8ecf6; margin: 0; padding: 32px; }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; } p.sub { color: #a9b4cc; margin: 0 0 20px; }
+    .summary { padding: 14px 18px; border-radius: 12px; font-weight: 700; font-size: 1.1rem; margin-bottom: 18px; }
+    .ok { background: rgba(34,197,94,.15); color: #4ade80; } .bad { background: rgba(239,68,68,.15); color: #f87171; }
+    table { width: 100%; border-collapse: collapse; background: #121a2e; border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #243050; font-size: .92rem; }
+    th { color: #8592ad; font-size: .78rem; text-transform: uppercase; }
+    .pass { color: #4ade80; font-weight: 700; } .fail { color: #f87171; font-weight: 700; }
+    h2 { margin-top: 28px; } pre { background: #121a2e; padding: 16px; border-radius: 12px; overflow: auto; font-size: .85rem; color: #a9b4cc; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Test 1 · Goals & Milestones</h1>
+  <p class="sub">Tests goal create / edit / delete, milestone add / edit / delete, status ↔ progress rules, overall progress and saving to localStorage.</p>
+  <div id="summary" class="summary"></div>
+  <table><thead><tr><th>#</th><th>Test</th><th>Result</th><th>Details</th></tr></thead><tbody id="results"></tbody></table>
+  <h2>Output: goal saved in localStorage during the test</h2>
+  <pre id="output"></pre>
+</main>
+
+<!-- The real project code being tested -->
+<script src="../js/utils.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/dependencies.js"></script>
+<script src="../js/goals.js"></script>
+<script>
+  /* ---------- Tiny test helper: records each check and shows it in the table ---------- */
+  const results = [];
+  function test(name, condition, details = '') {
+    results.push({ name, passed: !!condition, details });
+    console.log(`${condition ? 'PASS' : 'FAIL'} - ${name}`, details);
+  }
+  const savedGoals = () => JSON.parse(localStorage.getItem('goalmap_data'));
+
+  // Back up the user's real data so this test does not change it.
+  const backup = localStorage.getItem('goalmap_data');
+
+  try {
+    /* 1. Create a goal */
+    const goal = Goals.create({
+      name: 'Test Goal: Get Internship', description: 'Created by the test file',
+      category: 'Career', startDate: '2026-01-01', targetDate: '2026-03-31',
+    });
+    test('Create goal', Store.get(goal.id) !== null, `id = ${goal.id}`);
+    test('Goal is saved in localStorage', savedGoals().some(g => g.id === goal.id));
+    test('New goal starts with 0 milestones and 0% progress', goal.milestones.length === 0 && Goals.progress(goal) === 0);
+
+    /* 2. Add milestones */
+    const base = { description: '', status: 'not-started', progress: 0, dependencies: [] };
+    Goals.addMilestone(goal, { ...base, name: 'Learn Java', startDate: '2026-01-01', endDate: '2026-01-20' });
+    Goals.addMilestone(goal, { ...base, name: 'Learn DSA', startDate: '2026-01-21', endDate: '2026-02-20' });
+    Goals.addMilestone(goal, { ...base, name: 'Build Project', startDate: '2026-02-21', endDate: '2026-03-20' });
+    const [java, dsa, project] = goal.milestones;
+    test('Add 3 milestones', goal.milestones.length === 3, goal.milestones.map(m => m.name).join(', '));
+    test('Milestones are saved in localStorage', savedGoals().find(g => g.id === goal.id).milestones.length === 3);
+
+    /* 3. Status ↔ progress rules */
+    Goals.updateMilestone(goal, java, { progress: 100 }, 'progress');
+    test('Progress 100% → status becomes Completed', java.status === 'completed', `status = ${java.status}`);
+
+    Goals.updateMilestone(goal, dsa, { progress: 50 }, 'progress');
+    test('Progress 50% on a Not Started milestone → In Progress', dsa.status === 'in-progress', `status = ${dsa.status}`);
+
+    Goals.updateMilestone(goal, project, { status: 'completed' }, 'status');
+    test('Status Completed → progress becomes 100%', project.progress === 100, `progress = ${project.progress}%`);
+
+    Goals.updateMilestone(goal, project, { status: 'not-started' }, 'status');
+    test('Status Not Started → progress becomes 0%', project.progress === 0, `progress = ${project.progress}%`);
+
+    Goals.updateMilestone(goal, project, { status: 'delayed' }, 'status');
+    test('Status can be set to Delayed', project.status === 'delayed');
+
+    /* 4. Overall goal progress = average of milestone progress */
+    const expected = Math.round((100 + 50 + 0) / 3);
+    test('Overall goal progress is the average (100 + 50 + 0) / 3', Goals.progress(goal) === expected, `${Goals.progress(goal)}% (expected ${expected}%)`);
+    test('Goal status is In Progress', Goals.status(goal) === 'in-progress');
+    test('Completed milestone count', Goals.completedCount(goal) === 1, `${Goals.completedCount(goal)} of 3`);
+
+    /* 5. Edit a milestone and a goal */
+    Goals.updateMilestone(goal, project, { name: 'Build Portfolio Project' });
+    test('Edit milestone name', savedGoals().find(g => g.id === goal.id).milestones[2].name === 'Build Portfolio Project');
+    Goals.update(goal, { name: 'Test Goal: Software Internship' });
+    test('Edit goal name', savedGoals().find(g => g.id === goal.id).name === 'Test Goal: Software Internship');
+
+    /* 6. Delete a milestone (its id is also removed from other milestones' dependencies) */
+    project.dependencies = [dsa.id];
+    Goals.removeMilestone(goal, dsa);
+    test('Delete milestone', goal.milestones.length === 2 && !goal.milestones.includes(dsa));
+    test('Deleted milestone removed from dependency lists', !project.dependencies.includes(dsa.id), `dependencies = [${project.dependencies}]`);
+
+    /* 7. Goal becomes Completed when every milestone reaches 100% */
+    Goals.updateMilestone(goal, project, { progress: 100 }, 'progress');
+    test('All milestones 100% → goal Completed', Goals.status(goal) === 'completed' && Goals.progress(goal) === 100);
+
+    // Show the saved goal as output
+    document.getElementById('output').textContent = JSON.stringify(savedGoals().find(g => g.id === goal.id), null, 2);
+
+    /* 8. Delete the goal */
+    Goals.remove(goal);
+    test('Delete goal', !savedGoals().some(g => g.id === goal.id));
+  } catch (err) {
+    test('Test file ran without errors', false, err.message);
+  } finally {
+    // Put the user's real data back.
+    if (backup === null) localStorage.removeItem('goalmap_data'); else localStorage.setItem('goalmap_data', backup);
+  }
+
+  /* ---------- Show results ---------- */
+  const passed = results.filter(r => r.passed).length;
+  const summary = document.getElementById('summary');
+  summary.textContent = `${passed} / ${results.length} tests passed`;
+  summary.className = `summary ${passed === results.length ? 'ok' : 'bad'}`;
+  document.getElementById('results').innerHTML = results.map((r, i) =>
+    `<tr><td>${i + 1}</td><td>${U.esc(r.name)}</td><td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? '✔ PASS' : '✘ FAIL'}</td><td>${U.esc(r.details)}</td></tr>`).join('');
+</script>
+</body>
+</html>

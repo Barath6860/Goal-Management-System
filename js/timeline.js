@@ -5,15 +5,21 @@
    ========================================================================== */
 'use strict';
 
+const Timeline = {
+  /** The goal's milestones in chronological order (by start date, then end date). */
+  sorted(goal) {
+    return [...goal.milestones].sort((a, b) =>
+      a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+  },
+};
+
 Pages.timeline = function (root) {
   let goal = App.currentGoal();
 
   function render() {
     if (!goal) { root.innerHTML = App.noGoals(); return; }
 
-    // Sort milestones by start date (then end date).
-    const milestones = [...goal.milestones].sort((a, b) =>
-      a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+    const milestones = Timeline.sorted(goal);
     const today = U.today();
     const totalDays = U.diff(goal.startDate, goal.targetDate) + 1;
 

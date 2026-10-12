@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test 3 · Timeline · GoalMap</title>
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: #0b1020; color: #e8ecf6; margin: 0; padding: 32px; }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; } p.sub { color: #a9b4cc; margin: 0 0 20px; }
+    .summary { padding: 14px 18px; border-radius: 12px; font-weight: 700; font-size: 1.1rem; margin-bottom: 18px; }
+    .ok { background: rgba(34,197,94,.15); color: #4ade80; } .bad { background: rgba(239,68,68,.15); color: #f87171; }
+    table { width: 100%; border-collapse: collapse; background: #121a2e; border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #243050; font-size: .92rem; }
+    th { color: #8592ad; font-size: .78rem; text-transform: uppercase; }
+    .pass { color: #4ade80; font-weight: 700; } .fail { color: #f87171; font-weight: 700; }
+    h2 { margin-top: 28px; }
+    ol.timeline { background: #121a2e; padding: 18px 18px 18px 40px; border-radius: 12px; line-height: 2; }
+    ol.timeline li::marker { color: #7c79ff; font-weight: 700; }
+    .muted { color: #8592ad; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Test 3 · Timeline</h1>
+  <p class="sub">Tests the chronological ordering of milestones and the date helpers used by the timeline (adding days, counting days, formatting and "days left").</p>
+  <div id="summary" class="summary"></div>
+  <table><thead><tr><th>#</th><th>Test</th><th>Result</th><th>Details</th></tr></thead><tbody id="results"></tbody></table>
+  <h2>Output: timeline in chronological order</h2>
+  <ol class="timeline" id="output"></ol>
+</main>
+
+<!-- The real project code being tested -->
+<script src="../js/utils.js"></script>
+<script src="../js/timeline.js"></script>
+<script>
+  /* ---------- Tiny test helper ---------- */
+  const results = [];
+  function test(name, condition, details = '') {
+    results.push({ name, passed: !!condition, details });
+    console.log(`${condition ? 'PASS' : 'FAIL'} - ${name}`, details);
+  }
+
+  try {
+    /* 1. Date helpers */
+    test('addDays: 28 Feb 2026 + 1 day = 1 Mar 2026', U.addDays('2026-02-28', 1) === '2026-03-01', U.addDays('2026-02-28', 1));
+    test('addDays: 31 Dec 2026 + 1 day = 1 Jan 2027', U.addDays('2026-12-31', 1) === '2027-01-01', U.addDays('2026-12-31', 1));
+    test('addDays works with negative numbers', U.addDays('2026-03-01', -1) === '2026-02-28');
+    test('diff: 1 Jan → 31 Mar 2026 is 89 days', U.diff('2026-01-01', '2026-03-31') === 89, `${U.diff('2026-01-01', '2026-03-31')} days`);
+    test('fmt shows a readable date', U.fmt('2026-10-09') === '9 Oct 2026', U.fmt('2026-10-09'));
+    test('isValidDate accepts 2026-02-28', U.isValidDate('2026-02-28') === true);
+    test('isValidDate rejects 2026-02-30', U.isValidDate('2026-02-30') === false);
+
+    /* 2. "Days left" label shown on goals */
+    const today = U.today();
+    test('daysLeft: 10 days in the future', U.daysLeft(U.addDays(today, 10)) === '10 days left', U.daysLeft(U.addDays(today, 10)));
+    test('daysLeft: today', U.daysLeft(today) === 'Due today');
+    test('daysLeft: 3 days in the past', U.daysLeft(U.addDays(today, -3)) === '3 days overdue', U.daysLeft(U.addDays(today, -3)));
+
+    /* 3. Chronological order (milestones are added out of order on purpose) */
+    const goal = {
+      name: 'Become a Software Developer', startDate: '2026-01-01', targetDate: '2026-06-30',
+      milestones: [
+        { name: 'Apply for Internships', startDate: '2026-05-10', endDate: '2026-06-20', status: 'not-started' },
+        { name: 'Learn HTML', startDate: '2026-01-01', endDate: '2026-01-10', status: 'completed' },
+        { name: 'Build Project', startDate: '2026-03-15', endDate: '2026-04-30', status: 'in-progress' },
+        { name: 'Learn CSS', startDate: '2026-01-11', endDate: '2026-01-25', status: 'completed' },
+        { name: 'Learn JavaScript', startDate: '2026-01-11', endDate: '2026-03-10', status: 'delayed' },
+      ],
+    };
+    const order = Timeline.sorted(goal).map(m => m.name);
+    test('Timeline sorts milestones by start date',
+      order.join(' → ') === 'Learn HTML → Learn CSS → Learn JavaScript → Build Project → Apply for Internships', order.join(' → '));
+    test('Same start date → the one ending first comes first', order.indexOf('Learn CSS') < order.indexOf('Learn JavaScript'));
+    test('Sorting does not change the original milestone list', goal.milestones[0].name === 'Apply for Internships');
+
+    /* Output: the timeline as the Timeline page would order it */
+    document.getElementById('output').innerHTML =
+      `<li><strong>START</strong> <span class="muted">— ${U.fmt(goal.startDate)}</span></li>` +
+      Timeline.sorted(goal).map(m =>
+        `<li><strong>${m.name}</strong> <span class="muted">— ${U.fmt(m.startDate)} → ${U.fmt(m.endDate)} · ${U.diff(m.startDate, m.endDate) + 1} days · ${U.STATUS[m.status]}</span></li>`).join('') +
+      `<li><strong>TARGET DATE</strong> <span class="muted">— ${U.fmt(goal.targetDate)}</span></li>`;
+  } catch (err) {
+    test('Test file ran without errors', false, err.message);
+  }
+
+  /* ---------- Show results ---------- */
+  const passed = results.filter(r => r.passed).length;
+  const summary = document.getElementById('summary');
+  summary.textContent = `${passed} / ${results.length} tests passed`;
+  summary.className = `summary ${passed === results.length ? 'ok' : 'bad'}`;
+  document.getElementById('results').innerHTML = results.map((r, i) =>
+    `<tr><td>${i + 1}</td><td>${U.esc(r.name)}</td><td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? '✔ PASS' : '✘ FAIL'}</td><td>${U.esc(r.details)}</td></tr>`).join('');
+</script>
+</body>
+</html>

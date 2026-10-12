@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test 2 · Dependencies & Goal Map · GoalMap</title>
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: #0b1020; color: #e8ecf6; margin: 0; padding: 32px; }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; } p.sub { color: #a9b4cc; margin: 0 0 20px; }
+    .summary { padding: 14px 18px; border-radius: 12px; font-weight: 700; font-size: 1.1rem; margin-bottom: 18px; }
+    .ok { background: rgba(34,197,94,.15); color: #4ade80; } .bad { background: rgba(239,68,68,.15); color: #f87171; }
+    table { width: 100%; border-collapse: collapse; background: #121a2e; border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #243050; font-size: .92rem; }
+    th { color: #8592ad; font-size: .78rem; text-transform: uppercase; }
+    .pass { color: #4ade80; font-weight: 700; } .fail { color: #f87171; font-weight: 700; }
+    h2 { margin-top: 28px; }
+    .columns { display: flex; gap: 40px; align-items: center; background: #121a2e; padding: 20px; border-radius: 12px; overflow: auto; }
+    .col { display: flex; flex-direction: column; gap: 12px; }
+    .col span { font-size: .75rem; color: #8592ad; text-transform: uppercase; }
+    .box { padding: 10px 14px; border-radius: 10px; background: #18213a; border-left: 4px solid #64748b; white-space: nowrap; font-weight: 600; }
+    .box.done { border-left-color: #22c55e; }
+    ul.links { background: #121a2e; padding: 16px 16px 16px 36px; border-radius: 12px; line-height: 1.9; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Test 2 · Dependencies & Goal Map</h1>
+  <p class="sub">Tests "depends on" / "required for" lookups, waiting (blocked) milestones, loop prevention and the map column used to draw boxes and arrows.</p>
+  <div id="summary" class="summary"></div>
+  <table><thead><tr><th>#</th><th>Test</th><th>Result</th><th>Details</th></tr></thead><tbody id="results"></tbody></table>
+  <h2>Output: goal map columns (box positions)</h2>
+  <div class="columns" id="map"></div>
+  <h2>Output: dependency arrows</h2>
+  <ul class="links" id="links"></ul>
+</main>
+
+<!-- The real project code being tested -->
+<script src="../js/utils.js"></script>
+<script src="../js/dependencies.js"></script>
+<script>
+  /* ---------- Tiny test helper ---------- */
+  const results = [];
+  function test(name, condition, details = '') {
+    results.push({ name, passed: !!condition, details });
+    console.log(`${condition ? 'PASS' : 'FAIL'} - ${name}`, details);
+  }
+  const names = list => list.map(m => m.name).join(', ') || '(none)';
+
+  /* Test goal (kept in memory only — nothing is saved):
+       Learn Java ──► Learn DSA ─────┐
+            └──────► Build Project ──┴──► Apply for Internships       */
+  const ms = (id, name, dependencies, status = 'not-started') => ({ id, name, dependencies, status, progress: 0, startDate: '2026-01-01', endDate: '2026-01-10' });
+  const java = ms('a', 'Learn Java', []);
+  const dsa = ms('b', 'Learn DSA', ['a']);
+  const project = ms('c', 'Build Project', ['a']);
+  const apply = ms('d', 'Apply for Internships', ['b', 'c']);
+  const goal = { name: 'Test goal', milestones: [java, dsa, project, apply] };
+
+  try {
+    /* 1. Depends on / Required for */
+    test('"Apply" depends on Learn DSA and Build Project', names(Deps.prerequisites(goal, apply)) === 'Learn DSA, Build Project', names(Deps.prerequisites(goal, apply)));
+    test('"Learn Java" depends on nothing', Deps.prerequisites(goal, java).length === 0);
+    test('"Learn Java" is required for Learn DSA and Build Project', names(Deps.dependents(goal, java)) === 'Learn DSA, Build Project', names(Deps.dependents(goal, java)));
+    test('"Apply" is not required for anything (final milestone)', Deps.dependents(goal, apply).length === 0);
+
+    /* 2. Waiting for (blocked) */
+    test('"Learn DSA" is waiting for Learn Java', names(Deps.waitingFor(goal, dsa)) === 'Learn Java');
+    java.status = 'completed';
+    test('After Learn Java is completed, "Learn DSA" is ready', Deps.waitingFor(goal, dsa).length === 0);
+    test('"Apply" still waits for its 2 unfinished dependencies', Deps.waitingFor(goal, apply).length === 2, names(Deps.waitingFor(goal, apply)));
+    dsa.status = 'completed';
+    project.status = 'completed';
+    test('After both are completed, "Apply" is ready', Deps.waitingFor(goal, apply).length === 0);
+    test('A completed milestone never waits', Deps.waitingFor(goal, java).length === 0);
+
+    /* 3. Loop prevention (A → B → A is not allowed) */
+    test('Learn Java cannot depend on Apply (Apply already needs Java) → loop', Deps.createsLoop(goal, java, apply) === true);
+    test('Learn Java cannot depend on Learn DSA → loop', Deps.createsLoop(goal, java, dsa) === true);
+    test('A milestone cannot depend on itself', Deps.createsLoop(goal, dsa, dsa) === true);
+    test('Learn DSA may depend on Build Project (no loop)', Deps.createsLoop(goal, dsa, project) === false);
+
+    /* 4. Map columns: 0 = no dependencies, otherwise 1 + deepest dependency */
+    const cols = goal.milestones.map(m => Deps.column(goal, m));
+    test('Map columns are Java 0, DSA 1, Project 1, Apply 2', cols.join() === '0,1,1,2', `columns = [${cols}]`);
+
+    /* Output: draw the columns and the arrows as text */
+    const columns = [];
+    goal.milestones.forEach(m => (columns[Deps.column(goal, m)] = columns[Deps.column(goal, m)] || []).push(m));
+    document.getElementById('map').innerHTML = columns.map((list, i) =>
+      `<div class="col"><span>Column ${i}</span>${list.map(m => `<div class="box ${m.status === 'completed' ? 'done' : ''}">${m.name}</div>`).join('')}</div>`).join('<div>➜</div>');
+    document.getElementById('links').innerHTML = goal.milestones.flatMap(m =>
+      Deps.prerequisites(goal, m).map(p => `<li>${p.name} ➜ ${m.name}</li>`)).join('');
+  } catch (err) {
+    test('Test file ran without errors', false, err.message);
+  }
+
+  /* ---------- Show results ---------- */
+  const passed = results.filter(r => r.passed).length;
+  const summary = document.getElementById('summary');
+  summary.textContent = `${passed} / ${results.length} tests passed`;
+  summary.className = `summary ${passed === results.length ? 'ok' : 'bad'}`;
+  document.getElementById('results').innerHTML = results.map((r, i) =>
+    `<tr><td>${i + 1}</td><td>${U.esc(r.name)}</td><td class="${r.passed ? 'pass' : 'fail'}">${r.passed ? '✔ PASS' : '✘ FAIL'}</td><td>${U.esc(r.details)}</td></tr>`).join('');
+</script>
+</body>
+</html>
