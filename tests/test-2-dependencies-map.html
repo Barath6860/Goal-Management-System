@@ -26,7 +26,7 @@
 <body>
 <main>
   <h1>Test 2 · Dependencies & Goal Map</h1>
-  <p class="sub">Tests "depends on" / "required for" lookups, waiting (blocked) milestones, loop prevention and the map column used to draw boxes and arrows.</p>
+  <p class="sub">Tests "depends on" / "required for" lookups, waiting (blocked) milestones, the lock rule, loop prevention and the map column used to draw boxes and arrows.</p>
   <div id="summary" class="summary"></div>
   <table><thead><tr><th>#</th><th>Test</th><th>Result</th><th>Details</th></tr></thead><tbody id="results"></tbody></table>
   <h2>Output: goal map columns (box positions)</h2>
@@ -38,6 +38,7 @@
 <!-- The real project code being tested -->
 <script src="../js/utils.js"></script>
 <script src="../js/dependencies.js"></script>
+<script src="../js/goals.js"></script>
 <script>
   /* ---------- Tiny test helper ---------- */
   const results = [];
@@ -73,6 +74,24 @@
     project.status = 'completed';
     test('After both are completed, "Apply" is ready', Deps.waitingFor(goal, apply).length === 0);
     test('A completed milestone never waits', Deps.waitingFor(goal, java).length === 0);
+
+    /* 2b. Lock rule: a milestone stays Not Started (0%) until all its dependencies are completed */
+    const g2 = { milestones: [
+      ms('p', 'Core AWS Services', [], 'in-progress'),
+      { ...ms('q', 'Practice Exams', ['p'], 'in-progress'), progress: 40 },
+      { ...ms('r', 'Take the Exam', ['q'], 'in-progress'), progress: 10 },
+    ] };
+    test('"Practice Exams" is locked while Core AWS Services is unfinished', Goals.isLocked(g2, g2.milestones[1]) === true);
+    const reset = Goals.enforceLocks(g2);
+    test('Started locked milestones are reset to Not Started 0% (whole chain)', reset.join(', ') === 'Practice Exams, Take the Exam' &&
+      g2.milestones.slice(1).every(m => m.status === 'not-started' && m.progress === 0), `reset: ${reset.join(', ')}`);
+    g2.milestones[0].status = 'completed';
+    test('Completing Core AWS Services unlocks Practice Exams', Goals.isLocked(g2, g2.milestones[1]) === false);
+    test('"Take the Exam" stays locked until Practice Exams is completed', Goals.isLocked(g2, g2.milestones[2]) === true);
+    g2.milestones[1].status = 'in-progress'; g2.milestones[1].progress = 30;
+    const preview = Goals.previewReset(g2, g2.milestones[0], { status: 'in-progress' }, 'status');
+    test('Un-completing Core AWS Services would lock Practice Exams again', preview.join() === 'Practice Exams', preview.join(', '));
+    test('previewReset only tries it on a copy (real data unchanged)', g2.milestones[1].progress === 30);
 
     /* 3. Loop prevention (A → B → A is not allowed) */
     test('Learn Java cannot depend on Apply (Apply already needs Java) → loop', Deps.createsLoop(goal, java, apply) === true);

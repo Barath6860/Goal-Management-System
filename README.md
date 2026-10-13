@@ -24,9 +24,11 @@ Open `index.html` in a browser. No installation is needed.
 - Add, edit and delete milestones with status: Not Started, In Progress, Completed, Delayed
 - Milestone progress slider; overall goal progress is the average of milestone progress
 - Dependencies between milestones (loops are prevented)
+- Lock rule: a milestone stays locked (Not Started, 0%) until all milestones it depends on are completed
 - Visual goal map and chronological timeline
 - Goal search
 - Dark / light mode button
+- Animated background, slow entrance animations and hover effects (turned off when the system asks for reduced motion)
 - Data saved in localStorage
 
 ## Project structure
@@ -41,4 +43,5 @@ js/dependencies.js  dependency helpers and the Goal Map page
 js/timeline.js      Timeline page
 js/app.js           layout, dark/light mode, Dashboard and start-up
 assets/icons/logo.svg
+tests/              3 test pages (goals & milestones, dependencies & map, timeline)
 ```

@@ -85,7 +85,7 @@ Pages.timeline = function (root) {
       <div class="tl-card">
         <div class="row-between wrap">
           <strong class="tl-name">${U.esc(m.name)}</strong>
-          <span class="row">${overdue ? '<span class="chip chip-red">Past end date</span>' : ''}${U.badge(m.status)}</span>
+          <span class="row">${overdue ? '<span class="chip chip-red">Past end date</span>' : ''}${Goals.isLocked(goal, m) ? `<span class="badge badge-locked">${U.icon('lock')}Locked</span>` : U.badge(m.status)}</span>
         </div>
         <p class="tl-dates">${U.icon('calendar')}${U.fmt(m.startDate)} → ${U.fmt(m.endDate)} <span class="muted">· ${U.plural(days, 'day')}</span></p>
         ${deps.length ? `<p class="tl-deps">${U.icon('link')}Depends on: ${deps.map(d => U.esc(d.name)).join(', ')}</p>` : ''}

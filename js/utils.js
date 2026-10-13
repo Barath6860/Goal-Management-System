@@ -119,8 +119,9 @@ const U = (() => {
   }
 
   /* ---------- Modal dialog ----------
+     onOpen(dialog) runs once the dialog is shown.
      onConfirm(dialog) can return false to keep the dialog open (e.g. invalid form). */
-  function modal({ title, body, confirmText = 'Save', danger = false, onConfirm, onClose }) {
+  function modal({ title, body, confirmText = 'Save', danger = false, onOpen, onConfirm, onClose }) {
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `
@@ -155,6 +156,7 @@ const U = (() => {
     dialog.querySelector('form')?.addEventListener('submit', e => { e.preventDefault(); confirm(); });
     document.addEventListener('keydown', onKey);
     (dialog.querySelector('input, select, textarea') || dialog.querySelector('[data-confirm]')).focus();
+    if (onOpen) onOpen(dialog);
   }
 
   /** Yes/No confirmation → Promise<boolean> */
@@ -191,9 +193,23 @@ const U = (() => {
     return !first;
   }
 
+  /* ---------- Animation: numbers count up from 0 (e.g. "3 / 13", "42%") ---------- */
+  function countUp(el, duration = 1600) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const finalText = el.textContent;
+    const start = performance.now();
+    function frame(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);          // fast start, slow finish
+      el.textContent = finalText.replace(/\d+/g, n => Math.round(n * eased));
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
   return {
     today, addDays, diff, isValidDate, fmt, fmtShort, daysLeft,
     esc, uid, qs, plural, icon, STATUS, badge, bar,
-    toast, flash, showFlash, modal, confirm, formValues, showErrors,
+    toast, flash, showFlash, modal, confirm, formValues, showErrors, countUp,
   };
 })();

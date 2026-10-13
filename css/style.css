@@ -1,7 +1,7 @@
 /* ==========================================================================
    GoalMap · style.css
    1. Colours (dark + light)  2. Base  3. Layout  4. Components  5. Pages
-   6. Mobile
+   5b. Effects & animation  6. Mobile
    ========================================================================== */
 
 /* ------------------------- 1. Colours (dark is default) ------------------------- */
@@ -99,11 +99,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav-link { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--text-2); font-weight: 600; }
 .nav-link:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .nav-link.active { background: var(--primary-soft); color: var(--primary); }
-.sidebar-flow { margin-top: auto; padding: 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
-.sidebar-flow ol { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; counter-reset: step; }
-.sidebar-flow li { counter-increment: step; font-size: .85rem; color: var(--text-2); }
-.sidebar-flow li::before { content: counter(step) ". "; color: var(--primary); font-weight: 700; }
-.sidebar-foot { font-size: .78rem; color: var(--text-3); padding: 0 8px; }
 
 .main { margin-left: 240px; min-height: 100vh; }
 .topbar {
@@ -253,6 +248,7 @@ input[type=range] { padding: 0; min-height: 0; border: 0; box-shadow: none; acce
 }
 .goal-card:hover { transform: translateY(-3px); border-color: var(--border-strong); }
 .card-link { color: var(--text); }
+.card-link:hover { text-decoration: none; }
 .card-link::after { content: ""; position: absolute; inset: 0; }   /* whole card is clickable */
 .goal-desc { color: var(--text-3); font-size: .87rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .goal-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: .82rem; color: var(--text-2); }
@@ -279,6 +275,12 @@ input[type=range] { padding: 0; min-height: 0; border: 0; box-shadow: none; acce
 .ms-controls select { min-height: 36px; padding: 5px 10px; }
 .ms-controls output { min-width: 42px; text-align: right; font-weight: 700; font-size: .85rem; }
 .ms-actions { display: flex; }
+.ms-item.locked { border-left-color: var(--amber); }
+.ms-item.locked .ms-number { color: var(--amber); background: color-mix(in srgb, var(--amber) 15%, transparent); }
+.ms-item.locked .ms-number .icon { width: 15px; }
+.badge-locked { color: var(--amber); background: color-mix(in srgb, var(--amber) 15%, transparent); }
+.badge-locked .icon { width: 13px; }
+select:disabled, input:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Goal map */
 .map-layout { display: flex; flex-direction: column; gap: 20px; }
@@ -340,6 +342,177 @@ input[type=range] { padding: 0; min-height: 0; border: 0; box-shadow: none; acce
 .tl-today { position: relative; display: flex; align-items: center; gap: 10px; margin-left: -40px; color: var(--primary); font-size: .8rem; font-weight: 700; }
 .tl-today::after { content: ""; flex: 1; border-top: 2px dashed var(--primary); }
 .tl-today span { padding: 3px 10px; border-radius: 99px; background: var(--primary-soft); }
+
+/* -------------------------- 5b. Effects & animation --------------------------
+   Everything decorative lives here: the moving background, glass cards,
+   slow entrance animations, hover glows and flowing map arrows.        */
+
+/* Animated "aurora" background: two large blurred colour blobs drifting slowly */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: .45;
+  pointer-events: none;
+}
+body::before {
+  top: -20vmax; left: -10vmax;
+  background: radial-gradient(circle, #6d5dfc, transparent 65%);
+  animation: drift-a 28s ease-in-out infinite alternate;
+}
+body::after {
+  bottom: -25vmax; right: -15vmax;
+  background: radial-gradient(circle, #0ea5e9, transparent 65%);
+  animation: drift-b 34s ease-in-out infinite alternate;
+}
+[data-theme="light"] body::before,
+[data-theme="light"] body::after { opacity: .22; }
+@keyframes drift-a { to { transform: translate(25vw, 18vh) scale(1.2); } }
+@keyframes drift-b { to { transform: translate(-22vw, -20vh) scale(1.15); } }
+
+/* Faint dotted grid on top of the background */
+.main { background-image: radial-gradient(color-mix(in srgb, var(--text-3) 18%, transparent) 1px, transparent 1px); background-size: 26px 26px; }
+
+/* Glass surfaces: slightly see-through so the background glows through */
+.card, .stat-card, .goal-card, .mini-stat, .tl-card, .map-box, .modal {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.sidebar, .topbar {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+.modal-backdrop { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fade-in .35s ease; }
+.modal { animation: pop .45s cubic-bezier(.2, .9, .3, 1.2); }
+
+/* Gradient headings */
+.page-header h1, .goal-hero h1 {
+  width: fit-content;
+  background: linear-gradient(90deg, var(--text) 20%, var(--primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.brand img { transition: transform .8s cubic-bezier(.2, .9, .3, 1.3); }
+.brand:hover img { transform: rotate(-12deg) scale(1.1); }
+
+/* Navigation: smooth slide + glowing active item */
+.nav-link { transition: background .35s, color .35s, transform .35s; }
+.nav-link:hover { transform: translateX(4px); }
+.nav-link.active { box-shadow: inset 3px 0 0 var(--primary), 0 0 24px -8px var(--primary); }
+
+/* Buttons: gradient, glow and a light sweep on hover */
+.btn { transition: background .35s, border-color .35s, transform .35s, box-shadow .35s; }
+.btn:active { transform: scale(.97); }
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--primary), #a855f7);
+  box-shadow: 0 6px 20px -8px var(--primary);
+}
+.btn-primary:hover { background: linear-gradient(135deg, var(--primary-hover), #b46cf9); transform: translateY(-2px); box-shadow: 0 12px 28px -10px var(--primary); }
+.btn-primary::after {
+  content: "";
+  position: absolute; top: 0; left: -60%;
+  width: 40%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .35), transparent);
+  transform: skewX(-20deg);
+  transition: left .9s ease;
+}
+.btn-primary:hover::after { left: 130%; }
+
+/* Cards: slow lift, glowing border and a soft spotlight that follows the mouse */
+.card, .stat-card, .goal-card, .mini-stat, .tl-card { transition: transform .6s cubic-bezier(.2, .8, .2, 1), box-shadow .6s, border-color .6s; }
+.stat-card:hover, .goal-card:hover, .tl-card:hover, .link-stat:hover {
+  transform: translateY(-5px);
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  box-shadow: 0 18px 40px -18px var(--primary);
+}
+.stat-card, .goal-card { position: relative; overflow: hidden; }
+.stat-card::before, .goal-card::before {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--primary) 18%, transparent), transparent 70%);
+}
+.stat-card:hover::before, .goal-card:hover::before { opacity: 1; }
+.stat-icon { transition: transform .8s cubic-bezier(.2, .9, .3, 1.3); }
+.stat-card:hover .stat-icon { transform: rotate(-10deg) scale(1.12); }
+
+/* Progress bars: slow fill + a light shimmer gliding across */
+.progress span { position: relative; overflow: hidden; transition: width 1.2s cubic-bezier(.2, .8, .2, 1); }
+.progress span::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .35), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 3.2s ease-in-out infinite;
+}
+@keyframes shimmer { 60%, 100% { transform: translateX(100%); } }
+
+/* "In progress" dots pulse gently */
+.s-in-progress .dot { animation: pulse 2.4s ease-out infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 60%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+/* Goal map: pending arrows flow towards the dependent milestone */
+.arrow:not(.done) { animation: dash-flow 1.6s linear infinite; }
+.arrow.active { stroke-dasharray: 8 6; animation: dash-flow .9s linear infinite; }
+@keyframes dash-flow { to { stroke-dashoffset: -22; } }
+.map-box { transition: opacity .5s, transform .5s cubic-bezier(.2, .8, .2, 1), box-shadow .5s; }
+.map-box:hover { transform: translateY(-4px) scale(1.03); }
+.map-box.selected { animation: glow 2.4s ease-in-out infinite; }
+@keyframes glow { 50% { box-shadow: 0 0 0 3px var(--primary), 0 0 28px -4px var(--primary); } }
+
+/* Timeline: glowing line and pulsing current milestones */
+.timeline::before { background: linear-gradient(var(--primary), #a855f7 50%, var(--border-strong)); }
+.tl-item.s-in-progress .tl-dot { animation: pulse 2.4s ease-out infinite; }
+.tl-today span { animation: glow-soft 3s ease-in-out infinite; }
+@keyframes glow-soft { 50% { box-shadow: 0 0 18px -2px var(--primary); } }
+
+/* Slow entrance animations. They only run on the first page load
+   (body.intro), so re-drawing a page after an update does not replay them. */
+@keyframes rise { from { opacity: 0; transform: translateY(26px); } }
+@keyframes pop-in { from { opacity: 0; transform: scale(.85); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fill { from { width: 0; } }
+.intro .page > * { animation: rise 1s cubic-bezier(.2, .8, .2, 1) both; }
+.intro .page > *:nth-child(2) { animation-delay: .12s; }
+.intro .page > *:nth-child(3) { animation-delay: .24s; }
+.intro .page > *:nth-child(4) { animation-delay: .36s; }
+.intro .page > *:nth-child(5) { animation-delay: .48s; }
+.intro .stat-card,
+.intro .goal-card,
+.intro .tl-item,
+.intro .ms-item,
+.intro .upcoming li,
+.intro .sidebar .nav li { animation: rise .9s cubic-bezier(.2, .8, .2, 1) both; }
+.intro .map-box { animation: pop-in .8s cubic-bezier(.2, .9, .3, 1.2) both; }
+.intro .map-svg { animation: fade-in 1.6s ease .6s both; }
+.intro .progress span { animation: fill 1.8s cubic-bezier(.2, .8, .2, 1) both; }
+/* Stagger: each item starts a little after the previous one */
+.intro :is(.stat-card, .goal-card, .tl-item, .ms-item, .upcoming li, .map-box, .nav li):nth-child(2) { animation-delay: .4s; }
+.intro :is(.stat-card, .goal-card, .tl-item, .ms-item, .upcoming li, .map-box, .nav li):nth-child(3) { animation-delay: .5s; }
+.intro :is(.stat-card, .goal-card, .tl-item, .ms-item, .upcoming li, .map-box, .nav li):nth-child(4) { animation-delay: .6s; }
+.intro :is(.stat-card, .goal-card, .tl-item, .ms-item, .upcoming li, .map-box, .nav li):nth-child(5) { animation-delay: .7s; }
+.intro :is(.stat-card, .goal-card, .tl-item, .ms-item, .upcoming li, .map-box, .nav li):nth-child(6) { animation-delay: .8s; }
+.intro :is(.stat-card, .goal-card, .tl-item, .ms-item, .upcoming li, .map-box, .nav li):nth-child(n+7) { animation-delay: .9s; }
+
+/* Respect the operating system "reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
 
 /* -------------------------------- 6. Mobile -------------------------------- */
 @media (max-width: 1000px) {

@@ -53,16 +53,64 @@ const Goals = {
       else if (m.progress > 0 && m.status === 'not-started') m.status = 'in-progress';
     }
   },
+  /* ------------------------- Dependency lock rule -------------------------
+     A milestone is LOCKED while any milestone it depends on is not completed.
+     A locked milestone must stay "Not Started" at 0%.                        */
+  isLocked(goal, m) {
+    return Deps.prerequisites(goal, m).some(p => p.status !== 'completed');
+  },
+
+  /** Resets every locked milestone that was started (repeats so chains A → B → C are handled).
+      Returns the names of the milestones that were reset. */
+  enforceLocks(goal) {
+    const reset = [];
+    let changed = true;
+    while (changed) {
+      changed = false;
+      goal.milestones.forEach(m => {
+        if (Goals.isLocked(goal, m) && (m.status !== 'not-started' || m.progress > 0)) {
+          m.status = 'not-started';
+          m.progress = 0;
+          reset.push(m.name);
+          changed = true;
+        }
+      });
+    }
+    return reset;
+  },
+
+  /** Which milestones WOULD be locked again if we made this change? (tries it on a copy) */
+  previewReset(goal, m, changes, changed = 'status') {
+    const copy = JSON.parse(JSON.stringify(goal));
+    const target = copy.milestones.find(x => x.id === m.id);
+    Object.assign(target, changes);
+    Goals.syncStatus(target, changed);
+    return Goals.enforceLocks(copy).filter(name => name !== target.name);
+  },
+
   addMilestone(goal, data) {
     const m = { id: U.uid(), ...data };
     Goals.syncStatus(m, 'status');
     goal.milestones.push(m);
+    Goals.enforceLocks(goal);
     Store.save();
   },
+
+  /** Updates a milestone. Returns { unlocked: [names], reset: [names] } so the page can tell the user. */
   updateMilestone(goal, m, changes, changed = 'status') {
+    const lockedBefore = goal.milestones.filter(x => Goals.isLocked(goal, x));
     Object.assign(m, changes);
     Goals.syncStatus(m, changed);
+    const reset = Goals.enforceLocks(goal);
     Store.save();
+    const unlocked = lockedBefore.filter(x => !Goals.isLocked(goal, x)).map(x => x.name);
+    return { unlocked, reset };
+  },
+
+  /** Shows messages after a milestone update. */
+  announce(result) {
+    result.unlocked.forEach(name => U.toast(`“${name}” is now unlocked — you can start it.`, 'info'));
+    if (result.reset.length) U.toast(`Locked again: ${result.reset.join(', ')}`, 'info');
   },
   removeMilestone(goal, m) {
     goal.milestones = goal.milestones.filter(x => x.id !== m.id);
@@ -124,10 +172,43 @@ const Goals = {
           <div class="field"><label for="m-progress">Progress (%)</label>
             <input id="m-progress" type="number" name="progress" min="0" max="100" value="${v.progress}"></div>
           <div class="field span-2"><span class="label">Depends on</span>${depOptions}</div>
+          <p class="note note-warning span-2" id="lock-note" hidden></p>
         </form>`,
+
+      // Live lock check: if a chosen dependency is unfinished, this milestone cannot be started.
+      onOpen: dialog => {
+        const form = dialog.querySelector('form');
+        const note = form.querySelector('#lock-note');
+        function refreshLock() {
+          const chosen = [...form.querySelectorAll('input[name=deps]:checked')].map(c => c.value);
+          const blockers = goal.milestones.filter(x => chosen.includes(x.id) && x.status !== 'completed');
+          const locked = blockers.length > 0;
+          form.elements.status.disabled = locked;
+          form.elements.progress.disabled = locked;
+          if (locked) {
+            form.elements.status.value = 'not-started';
+            form.elements.progress.value = 0;
+            note.innerHTML = `${U.icon('lock')}Locked until ${blockers.map(b => `“${U.esc(b.name)}”`).join(', ')} ${blockers.length === 1 ? 'is' : 'are'} completed.`;
+          } else if (m) {
+            // Would this change lock other milestones again?
+            const reset = Goals.previewReset(goal, m, { status: form.elements.status.value, progress: Number(form.elements.progress.value) || 0, dependencies: chosen });
+            note.innerHTML = reset.length ? `${U.icon('lock')}Saving will lock again and reset: ${reset.map(U.esc).join(', ')}.` : '';
+          } else {
+            note.innerHTML = '';
+          }
+          note.hidden = !note.innerHTML;
+        }
+        form.addEventListener('change', refreshLock);
+        form.elements.progress.addEventListener('input', refreshLock);
+        refreshLock();
+      },
+
       onConfirm: dialog => {
         const form = dialog.querySelector('form');
         const f = U.formValues(form);
+        // Disabled (locked) fields are not included in the form values, so read them directly.
+        f.status = form.elements.status.value;
+        f.progress = form.elements.progress.value;
         const progress = Number(f.progress);
         const errors = {};
         if (!f.name) errors.name = 'Please enter a milestone name.';
@@ -145,7 +226,7 @@ const Goals = {
         };
         // If only the progress was changed, let progress decide the status.
         const changed = m && data.status === m.status && progress !== m.progress ? 'progress' : 'status';
-        if (m) Goals.updateMilestone(goal, m, data, changed);
+        if (m) Goals.announce(Goals.updateMilestone(goal, m, data, changed));
         else Goals.addMilestone(goal, data);
         U.toast(m ? 'Milestone updated.' : 'Milestone added.');
         onSaved();
@@ -301,20 +382,22 @@ Pages.details = function (root) {
   function milestoneRow(m, i) {
     const waiting = Deps.waitingFor(goal, m);
     const deps = Deps.prerequisites(goal, m);
-    return `<li class="ms-item s-${m.status}" data-id="${m.id}">
-      <span class="ms-number">${i + 1}</span>
+    const locked = Goals.isLocked(goal, m);
+    const lockText = locked ? `title="Locked: complete ${U.esc(waiting.map(d => d.name).join(', '))} first" disabled` : '';
+    return `<li class="ms-item s-${m.status} ${locked ? 'locked' : ''}" data-id="${m.id}">
+      <span class="ms-number">${locked ? U.icon('lock') : i + 1}</span>
       <div class="ms-main">
-        <div class="row wrap"><h3>${U.esc(m.name)}</h3>${U.badge(m.status)}</div>
+        <div class="row wrap"><h3>${U.esc(m.name)}</h3>${locked ? `<span class="badge badge-locked">${U.icon('lock')}Locked</span>` : U.badge(m.status)}</div>
         ${m.description ? `<p class="muted small">${U.esc(m.description)}</p>` : ''}
         <p class="ms-meta">${U.icon('calendar')}${U.fmt(m.startDate)} → ${U.fmt(m.endDate)}</p>
         ${deps.length ? `<p class="ms-meta">${U.icon('link')}Depends on: ${deps.map(d => U.esc(d.name)).join(', ')}</p>` : ''}
-        ${waiting.length ? `<p class="ms-meta text-warning">${U.icon('lock')}Waiting for: ${waiting.map(d => U.esc(d.name)).join(', ')}</p>` : ''}
+        ${locked ? `<p class="ms-meta text-warning">${U.icon('lock')}Unlocks when ${waiting.map(d => `“${U.esc(d.name)}”`).join(', ')} ${waiting.length === 1 ? 'is' : 'are'} completed</p>` : ''}
       </div>
       <div class="ms-controls">
-        <select aria-label="Status of ${U.esc(m.name)}" data-status>
+        <select aria-label="Status of ${U.esc(m.name)}" data-status ${lockText}>
           ${Goals.STATUSES.map(s => `<option value="${s}" ${m.status === s ? 'selected' : ''}>${U.STATUS[s]}</option>`).join('')}
         </select>
-        <div class="row"><input type="range" min="0" max="100" step="5" value="${m.progress}" aria-label="Progress of ${U.esc(m.name)}" data-progress><output>${m.progress}%</output></div>
+        <div class="row"><input type="range" min="0" max="100" step="5" value="${m.progress}" aria-label="Progress of ${U.esc(m.name)}" data-progress ${lockText}><output>${m.progress}%</output></div>
       </div>
       <div class="ms-actions">
         <button type="button" class="btn btn-ghost btn-icon" data-edit aria-label="Edit ${U.esc(m.name)}">${U.icon('edit')}</button>
@@ -336,19 +419,26 @@ Pages.details = function (root) {
     root.querySelectorAll('.ms-item').forEach(row => {
       const m = goal.milestones.find(x => x.id === row.dataset.id);
 
-      row.querySelector('[data-status]').addEventListener('change', e => {
-        Goals.updateMilestone(goal, m, { status: e.target.value }, 'status');
-        U.toast(`“${m.name}” is now ${U.STATUS[m.status]}.`);
+      /* Applies a status/progress change. If it would lock other milestones again
+         (e.g. un-completing a dependency), ask first. */
+      async function change(changes, changed) {
+        const reset = Goals.previewReset(goal, m, changes, changed);
+        if (reset.length && !await U.confirm('Lock dependent milestones?',
+          `${reset.map(n => `<strong>${U.esc(n)}</strong>`).join(', ')} depend on “${U.esc(m.name)}”. They will be locked again and reset to Not Started (0%).`, 'Continue')) {
+          render();
+          return;
+        }
+        const result = Goals.updateMilestone(goal, m, changes, changed);
+        U.toast(changed === 'status' ? `“${m.name}” is now ${U.STATUS[m.status]}.` : `Progress of “${m.name}” set to ${m.progress}%.`);
+        Goals.announce(result);
         render();
-      });
+      }
+
+      row.querySelector('[data-status]').addEventListener('change', e => change({ status: e.target.value }, 'status'));
 
       const slider = row.querySelector('[data-progress]');
       slider.addEventListener('input', () => { slider.nextElementSibling.textContent = `${slider.value}%`; });
-      slider.addEventListener('change', () => {
-        Goals.updateMilestone(goal, m, { progress: Number(slider.value) }, 'progress');
-        U.toast(`Progress of “${m.name}” set to ${m.progress}%.`);
-        render();
-      });
+      slider.addEventListener('change', () => change({ progress: Number(slider.value) }, 'progress'));
 
       row.querySelector('[data-edit]').addEventListener('click', () => Goals.milestoneModal(goal, m, render));
       row.querySelector('[data-delete]').addEventListener('click', async () => {

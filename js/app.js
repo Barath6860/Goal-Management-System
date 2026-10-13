@@ -21,12 +21,7 @@ const App = {
       <a class="brand" href="index.html"><img src="assets/icons/logo.svg" alt="" width="34" height="34"><span>GoalMap</span></a>
       <nav aria-label="Main navigation"><ul class="nav">
         ${App.NAV.map(n => `<li><a class="nav-link ${n.page === current ? 'active' : ''}" href="${n.href}" ${n.page === current ? 'aria-current="page"' : ''}>${U.icon(n.icon)}${n.label}</a></li>`).join('')}
-      </ul></nav>
-      <div class="sidebar-flow">
-        <span class="eyebrow">How it works</span>
-        <ol><li>Goal</li><li>Milestones</li><li>Dependencies</li><li>Progress</li><li>Timeline</li></ol>
-      </div>
-      <p class="sidebar-foot">Data is saved in this browser (localStorage).</p>`;
+      </ul></nav>`;
 
     const title = page === 'details' ? 'Goal Details' : App.NAV.find(n => n.page === page).label;
     document.getElementById('topbar').innerHTML = `
@@ -144,7 +139,25 @@ Pages.dashboard = function (root) {
    ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   const page = document.body.dataset.page;
+
+  // "intro" turns on the slow entrance animations for the first load only.
+  document.body.classList.add('intro');
+  setTimeout(() => document.body.classList.remove('intro'), 2600);
+
+  // Fix any saved milestone that was started before its dependencies were completed.
+  if (Store.all().some(g => Goals.enforceLocks(g).length)) Store.save();
+
   App.renderShell(page);
   Pages[page](document.getElementById('page'));
+  document.querySelectorAll('.stat-value').forEach(el => U.countUp(el));
   U.showFlash();
+});
+
+// Card spotlight: tell the CSS where the mouse is inside the card.
+document.addEventListener('mousemove', e => {
+  const card = e.target.closest('.stat-card, .goal-card');
+  if (!card) return;
+  const box = card.getBoundingClientRect();
+  card.style.setProperty('--mx', `${e.clientX - box.left}px`);
+  card.style.setProperty('--my', `${e.clientY - box.top}px`);
 });

@@ -69,7 +69,7 @@ Pages.map = function (root) {
         <section class="card map-card">
           <ul class="legend">
             ${Object.keys(U.STATUS).map(s => `<li class="s-${s}"><span class="dot"></span>${U.STATUS[s]}</li>`).join('')}
-            <li>${U.icon('lock')}Waiting for a dependency</li>
+            <li>${U.icon('lock')}Locked (dependency not completed)</li>
             <li class="map-hint">Scroll sideways to see the whole map →</li>
           </ul>
           <div class="map-scroll"><div class="map-canvas"></div></div>
@@ -176,8 +176,8 @@ Pages.map = function (root) {
       <h2 class="panel-title">${U.esc(m.name)}</h2>
       <p class="muted small">${U.esc(m.description || '')}</p>
       ${waiting.length
-        ? `<p class="note note-warning">${U.icon('lock')}Waiting for: ${waiting.map(w => U.esc(w.name)).join(', ')}</p>`
-        : m.status !== 'completed' ? `<p class="note note-success">${U.icon('check')}Ready — all dependencies are completed.</p>` : ''}
+        ? `<p class="note note-warning">${U.icon('lock')}Locked until ${waiting.map(w => `“${U.esc(w.name)}”`).join(', ')} ${waiting.length === 1 ? 'is' : 'are'} completed.</p>`
+        : m.status !== 'completed' ? `<p class="note note-success">${U.icon('check')}Unlocked — all dependencies are completed.</p>` : ''}
       <p class="small"><strong>${U.fmt(m.startDate)}</strong> → <strong>${U.fmt(m.endDate)}</strong></p>
       <div class="row-between small"><span class="muted">Progress</span><strong>${m.progress}%</strong></div>
       ${U.bar(m.progress, m.status)}
